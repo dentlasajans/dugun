@@ -5,6 +5,8 @@ import BackgroundParticles from './components/BackgroundParticles';
 import AdminPanel from './AdminPanel';
 import SystemAdminPanel from './SystemAdminPanel';
 
+import PhotoGalleryLogin from './PhotoGalleryLogin';
+
 function Home() {
   const { linkName } = useParams<{ linkName: string }>();
   
@@ -32,6 +34,7 @@ export default function App() {
       <Route path="/admin" element={<SystemAdminPanel />} />
       <Route path="/d1/:id" element={<AdminPanel />} />
       <Route path="/d1" element={<AdminPanel />} />
+      <Route path="/:linkName/giris" element={<PhotoGalleryLogin />} />
       <Route path="/:linkName" element={<Home />} />
     </Routes>
   );

@@ -13,6 +13,7 @@ type Wedding = {
   groomName: string;
   text1: string;
   text2: string;
+  pin: string;
 };
 
 export default function SystemAdminPanel() {
@@ -80,7 +81,8 @@ export default function SystemAdminPanel() {
         groomName: 'Düğün',
         linkName: 'yeni-dugun-' + Math.floor(Math.random() * 1000),
         text1: 'Hikayemiz Başlıyor...',
-        text2: 'Bizi yalnız bırakmadığınız için teşekkürler.'
+        text2: 'Bizi yalnız bırakmadığınız için teşekkürler.',
+        pin: Math.floor(100000 + Math.random() * 900000).toString()
       });
       fetchWeddings(token);
     } catch (e: any) {
@@ -219,6 +221,10 @@ export default function SystemAdminPanel() {
                          <label className="text-xs font-medium text-[#8a7a5e] block mb-1">Damat Adı</label>
                          <input type="text" className="w-full text-sm p-2 border border-[#dcc692] rounded focus:ring-2 focus:ring-[#b59551] outline-none" value={formData.groomName || ''} onChange={e => setFormData({...formData, groomName: e.target.value})} />
                        </div>
+                       <div>
+                         <label className="text-xs font-medium text-[#8a7a5e] block mb-1">Giriş PIN (6 Hane)</label>
+                         <input type="text" maxLength={6} className="w-full text-sm p-2 border border-[#dcc692] rounded focus:ring-2 focus:ring-[#b59551] outline-none" value={formData.pin || ''} onChange={e => setFormData({...formData, pin: e.target.value.replace(/\D/g, '')})} />
+                       </div>
                     </div>
                     <div>
                       <label className="text-xs font-medium text-[#8a7a5e] block mb-1">Başlık Yazısı</label>
@@ -242,6 +248,10 @@ export default function SystemAdminPanel() {
                     <div>
                       <p className="text-xs font-medium text-[#8a7a5e] mb-0.5">Açıklama</p>
                       <p className="text-sm text-[#4a4235] line-clamp-2">{w.text2}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-[#8a7a5e] mb-0.5">Giriş PIN</p>
+                      <p className="text-sm font-medium text-[#b59551] tracking-widest">{w.pin || 'Belirlenmedi'}</p>
                     </div>
                   </div>
                 )}
