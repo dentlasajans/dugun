@@ -390,27 +390,32 @@ setIsUploading(true);
                              formData.append('upload_preset', uploadPreset);
                              formData.append('folder', `dugunler/${wedding.id}`);
                              
-                             const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-                               method: 'POST',
-                               body: formData
-                             });
-                             
-                             if (!uploadRes.ok) {
-                               const errText = await uploadRes.text();
-                               throw new Error('Cloudinary hatası: ' + errText);
-                             }
-                             
-                             const uploadData = await uploadRes.json();
-                             if (uploadData.secure_url) {
-                               await addDoc(collection(db, 'weddings', wedding.id, 'photos'), {
-                                 secure_url: uploadData.secure_url,
-                                 public_id: uploadData.public_id,
-                                 format: uploadData.format || 'jpg',
-                                 created_at: new Date().toISOString()
+                             try {
+                               const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+                                 method: 'POST',
+                                 body: formData
                                });
+                               
+                               if (!uploadRes.ok) {
+                                 const errText = await uploadRes.text();
+                                 console.error('Cloudinary hatası:', errText);
+                               } else {
+                                 const uploadData = await uploadRes.json();
+                                 if (uploadData.secure_url) {
+                                   await addDoc(collection(db, 'weddings', wedding.id, 'photos'), {
+                                     secure_url: uploadData.secure_url,
+                                     public_id: uploadData.public_id,
+                                     format: uploadData.format || 'jpg',
+                                     created_at: new Date().toISOString()
+                                   });
+                                 }
+                               }
+                             } catch (uploadError) {
+                               console.error("Single file upload error", uploadError);
                              }
                              currentUploaded++;
                              setUploadedFilesCount(currentUploaded);
+                             await new Promise(resolve => setTimeout(resolve, 50)); // Yield to event loop for UI update
                            }
 
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">TEŞEKKÜRLER! ♥️</span>';
@@ -447,6 +452,9 @@ setIsUploading(true);
                               className="h-full bg-gradient-to-r from-[#d9be75] to-[#cba34a] rounded-full transition-all duration-300 ease-out"
                               style={{ width: (totalFiles > 0 ? ((uploadedFilesCount / totalFiles) * 100) : 0) + "%" }}
                             />
+                          </div>
+                          <div className="mt-2 text-[9px] font-sans font-medium text-[#8a7a5e] text-center opacity-80 uppercase tracking-wide animate-pulse">
+                            Lütfen bu sayfadan ayrılmayın.
                           </div>
                         </div>
                       )}
