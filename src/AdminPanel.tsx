@@ -4,7 +4,10 @@ import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useParams } from 'react-router-dom';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+import { auth, db } from './firebase';
 
 export function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -67,17 +70,21 @@ export default function AdminPanel() {
   const fetchPhotos = async (currentToken: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/photos/${weddingId}`, {
-        headers: { 'x-admin-pin': currentToken }
-      });
-      if (res.ok) {
-         const data = await res.json();
-         setPhotos(data.photos || []);
-      } else {
-         if (res.status === 401) {
-           signOut(auth);
-         }
+      // Find actual wedding doc id by linkName
+      let searchId = weddingId;
+      const q = query(collection(db, 'weddings'), where('linkName', '==', weddingId));
+      const qs = await getDocs(q);
+      if (!qs.empty) {
+        searchId = qs.docs[0].id;
       }
+      
+      const photosQuery = query(collection(db, 'weddings', searchId, 'photos'));
+      const photoDocs = await getDocs(photosQuery);
+      const items: Photo[] = [];
+      photoDocs.forEach(doc => {
+         items.push({ public_id: doc.id, ...doc.data() } as Photo);
+      });
+      setPhotos(items);
     } catch (err) {
       console.error(err);
     } finally {
@@ -103,24 +110,23 @@ export default function AdminPanel() {
   const handleDownload = async (bulkAll: boolean = false) => {
     try {
       setLoading(true);
-      const publicIds = bulkAll ? [] : Array.from(selectedIds);
+      const publicIds = bulkAll ? photos.map(p => p.public_id) : Array.from(selectedIds);
+      const toDownload = photos.filter(p => publicIds.includes(p.public_id));
       
-      const res = await fetch(`/api/download-zip/${weddingId}`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-admin-pin': token 
-        },
-        body: JSON.stringify({ publicIds })
-      });
-      
-      const data = await res.json();
-      if (data.url) {
-        // Trigger download
-        window.location.href = data.url;
-      } else {
-        alert('İndirme linki oluşturulamadı.');
+      if (toDownload.length === 0) return;
+
+      const zip = new JSZip();
+      const folder = zip.folder(`dugun_fotograflari_${weddingId}`);
+
+      for (const photo of toDownload) {
+        const response = await fetch(photo.secure_url);
+        const blob = await response.blob();
+        folder?.file(photo.public_id, blob);
       }
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      saveAs(content, `dugun_fotograflari_${weddingId}.zip`);
+
     } catch (err) {
       console.error(err);
       alert('İndirme başlatılamadı.');

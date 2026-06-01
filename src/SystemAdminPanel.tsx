@@ -3,7 +3,8 @@ import { LogIn, Lock, Plus, Save, Trash2, Link as LinkIcon, Image, Users } from 
 import { cn } from './AdminPanel';
 import { Link } from 'react-router-dom';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './firebase';
+import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { auth, db } from './firebase';
 
 type Wedding = {
   id: string;
@@ -61,15 +62,12 @@ export default function SystemAdminPanel() {
 
   const fetchWeddings = async (currentToken: string) => {
     try {
-      const res = await fetch('/api/weddings', {
-        headers: { 'x-admin-pin': currentToken }
+      const querySnapshot = await getDocs(collection(db, 'weddings'));
+      const fetched: Wedding[] = [];
+      querySnapshot.forEach((doc) => {
+        fetched.push({ id: doc.id, ...doc.data() } as Wedding);
       });
-      if (res.ok) {
-         const data = await res.json();
-         setWeddings(data);
-      } else if (res.status === 401) {
-         signOut(auth);
-      }
+      setWeddings(fetched);
     } catch (err) {
       console.error(err);
     }
@@ -77,23 +75,14 @@ export default function SystemAdminPanel() {
 
   const handleAdd = async () => {
     try {
-      const res = await fetch('/api/weddings', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-admin-pin': token 
-        },
-        body: JSON.stringify({
-          brideName: 'Yeni',
-          groomName: 'Düğün',
-          linkName: 'yeni-dugun-' + Math.floor(Math.random() * 1000),
-          text1: 'Hikayemiz Başlıyor...',
-          text2: 'Bizi yalnız bırakmadığınız için teşekkürler.'
-        })
+      await addDoc(collection(db, 'weddings'), {
+        brideName: 'Yeni',
+        groomName: 'Düğün',
+        linkName: 'yeni-dugun-' + Math.floor(Math.random() * 1000),
+        text1: 'Hikayemiz Başlıyor...',
+        text2: 'Bizi yalnız bırakmadığınız için teşekkürler.'
       });
-      if(res.ok) {
-        fetchWeddings(token);
-      }
+      fetchWeddings(token);
     } catch (e) {
       console.error(e);
     }
@@ -101,18 +90,10 @@ export default function SystemAdminPanel() {
 
   const handleSave = async (id: string) => {
     try {
-      const res = await fetch(`/api/weddings/${id}`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-admin-pin': token 
-        },
-        body: JSON.stringify(formData)
-      });
-      if (res.ok) {
-        setEditingId(null);
-        fetchWeddings(token);
-      }
+      const weddingRef = doc(db, 'weddings', id);
+      await updateDoc(weddingRef, formData);
+      setEditingId(null);
+      fetchWeddings(token);
     } catch (e) {
       console.error(e);
     }
@@ -121,11 +102,8 @@ export default function SystemAdminPanel() {
   const handleDelete = async (id: string) => {
     if (!confirm('Bu düğünü silmek istediğinize emin misiniz?')) return;
     try {
-      const res = await fetch(`/api/weddings/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-pin': token }
-      });
-      if (res.ok) fetchWeddings(token);
+      await deleteDoc(doc(db, 'weddings', id));
+      fetchWeddings(token);
     } catch(e) {
       console.error(e);
     }

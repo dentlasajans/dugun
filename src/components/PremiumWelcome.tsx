@@ -1,6 +1,8 @@
 import { motion } from 'motion/react';
 import { useState, useMemo, useEffect } from 'react';
 import { Camera, ChevronDown, Sparkles, Star } from 'lucide-react';
+import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const SakuraPetal = ({ cx, cy, scale, rot }: { cx: number, cy: number, scale: number, rot: number }) => (
   <path transform={`translate(${cx}, ${cy}) scale(${scale}) rotate(${rot})`} d="M 0,0 C -8,-10 -12,-20 -5,-25 Q 0,-22 0,-18 Q 0,-22 5,-25 C 12,-20 8,-10 0,0 Z" fill="#ffb7c5" stroke="#ff8da1" strokeWidth="0.5" />
@@ -168,19 +170,29 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
   useEffect(() => {
     const fetchWedding = async () => {
        try {
-         const url = weddingId ? `/api/wedding/${weddingId}` : `/api/wedding-default`;
-         const res = await fetch(url);
-         if (res.ok) {
-           const data = await res.json();
-           setWedding(data);
+         const searchParam = weddingId || 'demo';
+         const q = query(collection(db, 'weddings'), where('linkName', '==', searchParam));
+         const querySnapshot = await getDocs(q);
+         
+         if (!querySnapshot.empty) {
+           const docObj = querySnapshot.docs[0];
+           setWedding({ id: docObj.id, ...docObj.data() } as any);
          } else {
-           setWedding({
-             id: 'demo',
-             brideName: 'Elif',
-             groomName: 'Can',
-             text1: 'Hikayemiz Başlıyor...',
-             text2: 'Masalsı anılarımıza ve en mutlu günümüze ortak olduğunuz için sonsuz teşekkürler.'
-           });
+           // Also try by id if linkName fails
+           const q2 = query(collection(db, 'weddings'), where('id', '==', searchParam));
+           const querySnapshot2 = await getDocs(q2);
+           if (!querySnapshot2.empty) {
+             const docObj = querySnapshot2.docs[0];
+             setWedding({ id: docObj.id, ...docObj.data() } as any);
+           } else {
+             setWedding({
+               id: 'demo',
+               brideName: 'Elif',
+               groomName: 'Can',
+               text1: 'Hikayemiz Başlıyor...',
+               text2: 'Masalsı anılarımıza ve en mutlu günümüze ortak olduğunuz için sonsuz teşekkürler.'
+             });
+           }
          }
        } catch (err) {
          setWedding({
@@ -336,14 +348,39 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
                          if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2"><svg class="animate-spin w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Yüklüyor...</span>';
 
                          try {
+                           const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dejx0brol';
+                           if (!cloudName) {
+                             alert("Sistem hatası: Cloudinary Cloud Name tanımlı değil.");
+                             if (button) button.innerHTML = originalText;
+                             setIsOpen(false);
+                             return;
+                           }
+                           const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'atlas_dugunler';
                            for (let i = 0; i < files.length; i++) {
                              const formData = new FormData();
-                             formData.append('photo', files[i]);
+                             formData.append('file', files[i]);
+                             formData.append('upload_preset', uploadPreset);
+                             formData.append('folder', `dugunler/${wedding.id}`);
                              
-                             await fetch(`/api/upload/${wedding.id}`, {
+                             const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
                                method: 'POST',
                                body: formData
                              });
+                             
+                             if (!uploadRes.ok) {
+                               console.error('Cloudinary upload error', await uploadRes.text());
+                               continue;
+                             }
+                             
+                             const uploadData = await uploadRes.json();
+                             if (uploadData.secure_url) {
+                               await addDoc(collection(db, 'weddings', wedding.id, 'photos'), {
+                                 secure_url: uploadData.secure_url,
+                                 public_id: uploadData.public_id,
+                                 format: uploadData.format || 'jpg',
+                                 created_at: new Date().toISOString()
+                               });
+                             }
                            }
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">TEŞEKKÜRLER! ♥️</span>';
                            setTimeout(() => { if (button) button.innerHTML = originalText; }, 3000);
