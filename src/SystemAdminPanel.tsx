@@ -83,8 +83,9 @@ export default function SystemAdminPanel() {
         text2: 'Bizi yalnız bırakmadığınız için teşekkürler.'
       });
       fetchWeddings(token);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert('Yeni düğün eklenirken hata oluştu: ' + e.message);
     }
   };
 

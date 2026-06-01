@@ -368,8 +368,9 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
                              });
                              
                              if (!uploadRes.ok) {
-                               console.error('Cloudinary upload error', await uploadRes.text());
-                               continue;
+                               const errText = await uploadRes.text();
+                               console.error('Cloudinary upload error:', errText);
+                               throw new Error('Cloudinary hatası: ' + errText);
                              }
                              
                              const uploadData = await uploadRes.json();
@@ -384,8 +385,9 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
                            }
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">TEŞEKKÜRLER! ♥️</span>';
                            setTimeout(() => { if (button) button.innerHTML = originalText; }, 3000);
-                         } catch (err) {
+                         } catch (err: any) {
                            console.error(err);
+                           alert("Yükleme Sırasında Hata Oluştu:\n" + err.message);
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">HATA!</span>';
                            setTimeout(() => { if (button) button.innerHTML = originalText; }, 3000);
                          }
