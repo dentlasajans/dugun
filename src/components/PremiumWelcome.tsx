@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Camera, ChevronDown, Sparkles, Star } from 'lucide-react';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import imageCompression from 'browser-image-compression';
 
 const SakuraPetal = ({ cx, cy, scale, rot }: { cx: number, cy: number, scale: number, rot: number }) => (
   <path transform={`translate(${cx}, ${cy}) scale(${scale}) rotate(${rot})`} d="M 0,0 C -8,-10 -12,-20 -5,-25 Q 0,-22 0,-18 Q 0,-22 5,-25 C 12,-20 8,-10 0,0 Z" fill="#ffb7c5" stroke="#ff8da1" strokeWidth="0.5" />
@@ -356,9 +357,27 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
                              return;
                            }
                            const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'atlas_dugunler';
-                           for (let i = 0; i < files.length; i++) {
+                           
+                           const uploadPromises = Array.from(files).map(async (file) => {
+                             // Compress the image before uploading
+                             const options = {
+                               maxSizeMB: 1, // highly compressed, fast
+                               maxWidthOrHeight: 1920,
+                               useWebWorker: true,
+                               fileType: 'image/jpeg'
+                             };
+                             let compressedFile = file;
+                             try {
+                               // Only compress images, not other files just in case
+                               if (file.type.startsWith('image/')) {
+                                  compressedFile = await imageCompression(file, options);
+                               }
+                             } catch (error) {
+                               console.warn("Compression failed, uploading original file", error);
+                             }
+
                              const formData = new FormData();
-                             formData.append('file', files[i]);
+                             formData.append('file', compressedFile);
                              formData.append('upload_preset', uploadPreset);
                              formData.append('folder', `dugunler/${wedding.id}`);
                              
@@ -369,7 +388,6 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
                              
                              if (!uploadRes.ok) {
                                const errText = await uploadRes.text();
-                               console.error('Cloudinary upload error:', errText);
                                throw new Error('Cloudinary hatası: ' + errText);
                              }
                              
@@ -382,7 +400,10 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
                                  created_at: new Date().toISOString()
                                });
                              }
-                           }
+                           });
+                           
+                           await Promise.all(uploadPromises);
+
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">TEŞEKKÜRLER! ♥️</span>';
                            setTimeout(() => { if (button) button.innerHTML = originalText; }, 3000);
                          } catch (err: any) {
