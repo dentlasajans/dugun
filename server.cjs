@@ -30,9 +30,10 @@ var import_multer = __toESM(require("multer"), 1);
 var import_cloudinary = require("cloudinary");
 var import_vite = require("vite");
 var import_dotenv = __toESM(require("dotenv"), 1);
+var import_firebase_admin = __toESM(require("firebase-admin"), 1);
 import_dotenv.default.config();
 var app = (0, import_express.default)();
-var PORT = process.env.PORT || 3e3;
+var PORT = 3e3;
 app.use((0, import_cors.default)());
 app.use(import_express.default.json());
 import_cloudinary.v2.config({
@@ -67,21 +68,30 @@ var saveWeddings = () => {
   import_fs.default.writeFileSync(dataFile, JSON.stringify(weddings, null, 2));
 };
 loadWeddings();
-var authenticateAdmin = (req, res, next) => {
-  const pin = req.headers["x-admin-pin"];
-  const correctPin = "356807";
-  if (pin !== correctPin) {
-    return res.status(401).json({ error: "Unauthorized. Invalid PIN." });
+import_firebase_admin.default.initializeApp({
+  projectId: "atlaspos-8e4a9"
+});
+var authenticateAdmin = async (req, res, next) => {
+  const token = req.headers["authorization"]?.split("Bearer ")[1] || req.headers["x-admin-pin"];
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized. Missing token." });
   }
-  next();
+  try {
+    const decodedToken = await import_firebase_admin.default.auth().verifyIdToken(token);
+    req.user = decodedToken;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: "Unauthorized. Invalid token." });
+  }
 };
-app.post("/api/auth", (req, res) => {
+app.post("/api/auth", async (req, res) => {
   const { pin } = req.body;
-  const correctPin = "356807";
-  if (pin === correctPin) {
+  try {
+    if (!pin) throw new Error("No token");
+    await import_firebase_admin.default.auth().verifyIdToken(pin);
     res.json({ success: true });
-  } else {
-    res.status(401).json({ error: "Invalid PIN" });
+  } catch (err) {
+    res.status(401).json({ error: "Invalid token" });
   }
 });
 app.get("/api/weddings", authenticateAdmin, (req, res) => {
