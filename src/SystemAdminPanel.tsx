@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LogIn, Lock, Plus, Save, Trash2, Link as LinkIcon, Image, Users } from 'lucide-react';
 import { cn } from './AdminPanel';
 import { Link } from 'react-router-dom';
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from './firebase';
 
 type Wedding = {
   id: string;
@@ -13,65 +15,60 @@ type Wedding = {
 };
 
 export default function SystemAdminPanel() {
-  const [pin, setPin] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [token, setToken] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   const [weddings, setWeddings] = useState<Wedding[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Wedding>>({});
 
   useEffect(() => {
-    const savedPin = localStorage.getItem('adminPin');
-    if (savedPin) {
-      setPin(savedPin);
-      verifyPin(savedPin);
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const idToken = await user.getIdToken();
+        setToken(idToken);
+        setIsAuthenticated(true);
+        fetchWeddings(idToken);
+      } else {
+        setIsAuthenticated(false);
+        setToken('');
+      }
+      setLoading(false);
+    });
+    return unsubscribe;
   }, []);
 
-  const verifyPin = async (pinToVerify: string) => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: pinToVerify })
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setIsAuthenticated(true);
-        localStorage.setItem('adminPin', pinToVerify);
-        fetchWeddings(pinToVerify);
-      } else {
-        setError(data.error || 'Geçersiz PIN');
-        localStorage.removeItem('adminPin');
-      }
-    } catch (err) {
-      setError('Bağlantı hatası oluştu.');
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err: any) {
+      setError('Giriş başarısız. Bilgilerinizi kontrol edin.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    verifyPin(pin);
+  const handleLogout = async () => {
+    await signOut(auth);
   };
 
-  const fetchWeddings = async (currentPin: string) => {
+  const fetchWeddings = async (currentToken: string) => {
     try {
       const res = await fetch('/api/weddings', {
-        headers: { 'x-admin-pin': currentPin }
+        headers: { 'x-admin-pin': currentToken }
       });
       if (res.ok) {
          const data = await res.json();
          setWeddings(data);
       } else if (res.status === 401) {
-         setIsAuthenticated(false);
-         localStorage.removeItem('adminPin');
+         signOut(auth);
       }
     } catch (err) {
       console.error(err);
@@ -84,7 +81,7 @@ export default function SystemAdminPanel() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'x-admin-pin': pin 
+          'x-admin-pin': token 
         },
         body: JSON.stringify({
           brideName: 'Yeni',
@@ -95,7 +92,7 @@ export default function SystemAdminPanel() {
         })
       });
       if(res.ok) {
-        fetchWeddings(pin);
+        fetchWeddings(token);
       }
     } catch (e) {
       console.error(e);
@@ -108,13 +105,13 @@ export default function SystemAdminPanel() {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
-          'x-admin-pin': pin 
+          'x-admin-pin': token 
         },
         body: JSON.stringify(formData)
       });
       if (res.ok) {
         setEditingId(null);
-        fetchWeddings(pin);
+        fetchWeddings(token);
       }
     } catch (e) {
       console.error(e);
@@ -126,15 +123,17 @@ export default function SystemAdminPanel() {
     try {
       const res = await fetch(`/api/weddings/${id}`, {
         method: 'DELETE',
-        headers: { 'x-admin-pin': pin }
+        headers: { 'x-admin-pin': token }
       });
-      if (res.ok) fetchWeddings(pin);
+      if (res.ok) fetchWeddings(token);
     } catch(e) {
       console.error(e);
     }
-  }
+  };
 
-  const originUrl = window.location.origin + window.location.pathname;
+  if (loading && !isAuthenticated) {
+    return <div className="min-h-screen bg-[#060913] flex items-center justify-center p-4"><p className="text-white">Yükleniyor...</p></div>;
+  }
 
   if (!isAuthenticated) {
     return (
@@ -149,14 +148,25 @@ export default function SystemAdminPanel() {
            
            <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-[#4a4235] mb-2 text-center">Yönetici PIN Kodu</label>
+                <label className="block text-sm font-medium text-[#4a4235] mb-2 text-center">E-posta</label>
+                <input 
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full text-center p-3 border border-[#dcc692] rounded-md focus:outline-none focus:ring-2 focus:ring-[#b59551] bg-[#fdfbf7]"
+                  placeholder="admin@example.com"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#4a4235] mb-2 text-center">Şifre</label>
                 <input 
                   type="password"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  className="w-full text-center text-xl tracking-[0.5em] p-3 border border-[#dcc692] rounded-md focus:outline-none focus:ring-2 focus:ring-[#b59551] bg-[#fdfbf7]"
-                  placeholder="****"
-                  maxLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full text-center p-3 border border-[#dcc692] rounded-md focus:outline-none focus:ring-2 focus:ring-[#b59551] bg-[#fdfbf7]"
+                  placeholder="••••••"
+                  required
                 />
               </div>
               {error && <p className="text-red-500 text-sm text-center font-medium">{error}</p>}
@@ -165,7 +175,7 @@ export default function SystemAdminPanel() {
                 disabled={loading}
                 className="w-full bg-[#2a2419] text-white py-3 rounded-md font-medium tracking-wider hover:bg-[#1a160f] transition-colors disabled:opacity-50"
               >
-                {loading ? 'KONTROL EDILIYOR...' : 'GİRİŞ YAP'}
+                {loading ? 'KONTROL EDİLİYOR...' : 'GİRİŞ YAP'}
               </button>
            </form>
         </div>
@@ -181,13 +191,22 @@ export default function SystemAdminPanel() {
             <h1 className="text-2xl font-bold tracking-tight">Düğün Yönetim Paneli</h1>
             <p className="text-sm text-[#8a7a5e] mt-1">Sistemdeki aktif bağlantıları ve ayarları buradan yönetin.</p>
           </div>
-          <button 
-             onClick={handleAdd}
-             className="flex items-center gap-2 bg-[#b59551] text-white px-4 py-2 rounded-md font-medium hover:bg-[#a08242] transition-colors shadow-sm"
-          >
-            <Plus className="w-4 h-4" /> Yeni Düğün Ekle
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+               onClick={handleLogout}
+               className="text-[#8a7a5e] hover:text-[#2a2419] font-medium text-sm transition-colors"
+            >
+              Çıkış Yap
+            </button>
+            <button 
+               onClick={handleAdd}
+               className="flex items-center gap-2 bg-[#b59551] text-white px-4 py-2 rounded-md font-medium hover:bg-[#a08242] transition-colors shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Yeni Düğün Ekle
+            </button>
+          </div>
         </div>
+
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {weddings.map((w) => (

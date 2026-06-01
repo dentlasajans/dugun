@@ -10,7 +10,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -53,24 +53,36 @@ const saveWeddings = () => {
 };
 loadWeddings();
 
-// Ensure PIN authentication
-const authenticateAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const pin = req.headers['x-admin-pin'];
-  const correctPin = '356807';
-  if (pin !== correctPin) {
-    return res.status(401).json({ error: 'Unauthorized. Invalid PIN.' });
+import admin from 'firebase-admin';
+
+admin.initializeApp({
+  projectId: "atlaspos-8e4a9"
+});
+
+// Ensure authentication via Firebase ID Token
+const authenticateAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const token = req.headers['authorization']?.split('Bearer ')[1] || (req.headers['x-admin-pin'] as string);
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized. Missing token.' });
   }
-  next();
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    (req as any).user = decodedToken;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Unauthorized. Invalid token.' });
+  }
 };
 
-// API Route: Verify PIN
-app.post('/api/auth', (req, res) => {
-  const { pin } = req.body;
-  const correctPin = '356807';
-  if (pin === correctPin) {
+// API Route: Verify token explicitly (optional but matches old POST /api/auth)
+app.post('/api/auth', async (req, res) => {
+  const { pin } = req.body; // pin here will actually be the token
+  try {
+    if(!pin) throw new Error("No token");
+    await admin.auth().verifyIdToken(pin);
     res.json({ success: true });
-  } else {
-    res.status(401).json({ error: 'Invalid PIN' });
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid token' });
   }
 });
 
