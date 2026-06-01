@@ -90,14 +90,29 @@ export default function PhotoGalleryLogin() {
     }
   };
 
-  const downloadFile = async (url: string, filename: string) => {
+  const handleImageError = (id: string) => {
+    setPhotos(prev => prev.filter(p => p.id !== id));
+  };
+
+  const shareOrDownloadFile = async (url: string, filename: string) => {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url.replace("http://", "https://"), { mode: 'cors' });
       const blob = await response.blob();
-      saveAs(blob, filename);
+      
+      const file = new File([blob], filename, { type: blob.type });
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Düğün Fotoğrafı',
+        });
+      } else {
+        saveAs(blob, filename);
+      }
     } catch (err) {
-      console.error("Download failed:", err);
-      alert('İndirme başarısız oldu.');
+      console.error("Download or share failed:", err);
+      // Fallback
+      window.open(url, '_blank');
     }
   };
 
@@ -284,12 +299,13 @@ export default function PhotoGalleryLogin() {
                        alt="Wedding Moment" 
                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                        loading="lazy"
+                       onError={() => handleImageError(photo.id)}
                     />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
                        <button 
-                         onClick={() => downloadFile(photo.secure_url, `foto-${index + 1}.${photo.format || 'jpg'}`)}
+                         onClick={() => shareOrDownloadFile(photo.secure_url, `foto-${index + 1}.${photo.format || 'jpg'}`)}
                          className="bg-white text-[#2a2419] p-3 rounded-full transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 hover:scale-105 hover:bg-[#f6f3ea] shadow-lg"
-                         title="İndir"
+                         title="İndir / Paylaş"
                        >
                           <Download className="w-5 h-5" />
                        </button>
@@ -298,7 +314,7 @@ export default function PhotoGalleryLogin() {
                  <div className="pt-2 px-3 pb-3 bg-white border-t border-[#eaddb6]/50 flex justify-between items-center">
                     <span className="text-[10px] font-medium text-[#8a7a5e] uppercase tracking-wider truncate mr-2">foto-{index + 1}.{photo.format || 'jpg'}</span>
                     <button 
-                       onClick={() => downloadFile(photo.secure_url, `foto-${index + 1}.${photo.format || 'jpg'}`)}
+                       onClick={() => shareOrDownloadFile(photo.secure_url, `foto-${index + 1}.${photo.format || 'jpg'}`)}
                        className="text-[#b59551] hover:text-[#8a7a5e] transition-colors p-1"
                        title="JPEG İndir"
                     >

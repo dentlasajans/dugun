@@ -230,7 +230,7 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
 
   return (
     <div 
-      className="relative w-full h-[100dvh] flex flex-col items-center justify-center overflow-hidden font-sans cursor-pointer bg-[#f2efe9]"
+      className="relative w-full h-full min-h-[100dvh] flex flex-col items-center justify-center overflow-hidden font-sans cursor-pointer bg-transparent"
       onClick={handleClose}
     >
       <div className="absolute inset-0 z-0 pointer-events-none bg-gradient-to-b from-[#f2efe9]/40 to-[#e6dfd1]/90" />

@@ -11,15 +11,14 @@ function Home() {
   const { linkName } = useParams<{ linkName: string }>();
   
   return (
-    <div className="min-h-screen bg-[#060913] flex items-center justify-center w-full selection:bg-[#d4af37]/30">
+    <div className="min-h-screen bg-[#f2efe9] flex items-center justify-center w-full selection:bg-[#d4af37]/30">
       {/* 
         Strict Mobile Container 
         Max width simulates mobile view on desktop
-        100dvh handles mobile browser chrome correctly 
       */}
-      <div className="w-full max-w-[440px] h-[100dvh] relative overflow-hidden flex flex-col preserve-3d">
+      <div className="w-full max-w-[440px] min-h-screen relative overflow-hidden flex flex-col preserve-3d shadow-2xl bg-transparent">
         <BackgroundParticles />
-        <div className="flex-1 w-full relative z-10 overflow-hidden no-scrollbar">
+        <div className="flex-1 w-full relative z-10 overflow-hidden no-scrollbar flex flex-col">
           <PremiumWelcome weddingId={linkName || 'demo'} />
         </div>
       </div>
