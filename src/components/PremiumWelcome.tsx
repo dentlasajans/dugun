@@ -365,19 +365,18 @@ setIsUploading(true);
                            }
                            const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'atlas_dugunler';
                            
-                           let currentUploaded = 0;
-                           for (let i = 0; i < files.length; i++) {
-                             const file = files[i];
+                           const filesArray = Array.from(files);
+                           
+                           const uploadFile = async (file: File) => {
                              // Compress the image before uploading
                              const options = {
-                               maxSizeMB: 1, // highly compressed, fast
-                               maxWidthOrHeight: 1920,
+                               maxSizeMB: 0.8, // kaliteyi koruyarak dosya boyutunu biraz daha küçültüyoruz
+                               maxWidthOrHeight: 1600, // HD kalitede tutuyoruz, yükleme hızını ciddi oranda artırır
                                useWebWorker: true,
                                fileType: 'image/jpeg'
                              };
                              let compressedFile = file;
                              try {
-                               // Only compress images, not other files just in case
                                if (file.type.startsWith('image/')) {
                                   compressedFile = await imageCompression(file, options);
                                }
@@ -413,10 +412,21 @@ setIsUploading(true);
                              } catch (uploadError) {
                                console.error("Single file upload error", uploadError);
                              }
-                             currentUploaded++;
-                             setUploadedFilesCount(currentUploaded);
-                             await new Promise(resolve => setTimeout(resolve, 50)); // Yield to event loop for UI update
-                           }
+                             
+                             // Her yükleme bittiğinde state'i functional olarak güncelle ki anında bar dolsun
+                             setUploadedFilesCount(prev => prev + 1);
+                           };
+
+                           // 6 fotoğrafı aynı anda işleyen concurrent yükleyici yapı (Tarayıcı sınırlarına uygun maksimum hız)
+                           let fileIndex = 0;
+                           const workers = Array(6).fill(null).map(async () => {
+                             while (fileIndex < filesArray.length) {
+                               const currentIndex = fileIndex++;
+                               await uploadFile(filesArray[currentIndex]);
+                             }
+                           });
+                           
+                           await Promise.all(workers);
 
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">TEŞEKKÜRLER! ♥️</span>';
                            setTimeout(() => { if (button) button.innerHTML = originalText; setIsUploading(false); }, 3000);
