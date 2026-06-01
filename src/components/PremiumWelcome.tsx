@@ -160,6 +160,10 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
   const [isHovering, setIsHovering] = useState(false);
   const [isInstantClose, setIsInstantClose] = useState(false);
   
+  const [totalFiles, setTotalFiles] = useState(0);
+  const [uploadedFilesCount, setUploadedFilesCount] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  
   const [wedding, setWedding] = useState({
     id: weddingId || 'demo',
     brideName: '...',
@@ -340,6 +344,9 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
                        multiple
                        onChange={async (e) => {
                          const files = e.target.files;
+setTotalFiles(files ? files.length : 0);
+setUploadedFilesCount(0);
+setIsUploading(true);
                          if (!files || files.length === 0) return;
                          
                          // Feedback overlay setup
@@ -405,12 +412,12 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
                            await Promise.all(uploadPromises);
 
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">TEŞEKKÜRLER! ♥️</span>';
-                           setTimeout(() => { if (button) button.innerHTML = originalText; }, 3000);
+                           setTimeout(() => { if (button) button.innerHTML = originalText; setIsUploading(false); }, 3000);
                          } catch (err: any) {
                            console.error(err);
                            alert("Yükleme Sırasında Hata Oluştu:\n" + err.message);
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">HATA!</span>';
-                           setTimeout(() => { if (button) button.innerHTML = originalText; }, 3000);
+                           setTimeout(() => { if (button) button.innerHTML = originalText; setIsUploading(false); }, 3000);
                          }
                        }}
                      />
@@ -425,9 +432,23 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
                         <div className="absolute inset-0 bg-white/30 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
                         <span className="relative flex items-center justify-center gap-2 pointer-events-none">
                           <Camera className="w-4 h-4" /> BİZE FOTOĞRAF GÖNDER
-                        </span>
-                     </button>
-                  </div>
+                         </span>
+                      </button>
+                      {isUploading && (
+                        <div className="mt-4 w-full animate-in fade-in duration-300">
+                          <div className="flex justify-between items-center text-[10px] font-sans font-bold text-[#8a7a5e] mb-1.5 px-1 tracking-wider uppercase">
+                            <span>{totalFiles === uploadedFilesCount ? "TAMAMLANDI!" : "YÜKLENİYOR..."}</span>
+                            <span>{uploadedFilesCount} / {totalFiles}</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-[#eaddb6]/60 rounded-full overflow-hidden shadow-inner border border-[#dcc692]/30">
+                            <div 
+                              className="h-full bg-gradient-to-r from-[#d9be75] to-[#cba34a] rounded-full transition-all duration-300 ease-out"
+                              style={{ width: (totalFiles > 0 ? ((uploadedFilesCount / totalFiles) * 100) : 0) + "%" }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                   </div>
                   
                   <span className="text-[11px] font-sans tracking-[0.25em] text-[#8a7a5e] uppercase font-bold">15 Ağustos 2026</span>
                </motion.div>
