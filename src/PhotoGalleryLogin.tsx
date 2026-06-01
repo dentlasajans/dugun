@@ -21,11 +21,21 @@ export default function PhotoGalleryLogin() {
   const [error, setError] = useState('');
   const [wedding, setWedding] = useState<any>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showGreetingModal, setShowGreetingModal] = useState(false);
+  const [greetingCountdown, setGreetingCountdown] = useState(3);
   
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isAuthenticated && showGreetingModal && greetingCountdown > 0) {
+      timer = setTimeout(() => setGreetingCountdown(prev => prev - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, showGreetingModal, greetingCountdown]);
 
   useEffect(() => {
     // Check if we have the wedding data
@@ -42,6 +52,8 @@ export default function PhotoGalleryLogin() {
            const savedPin = localStorage.getItem(`wedding_pin_${linkName}`);
            if (savedPin && savedPin === data.pin) {
              setIsAuthenticated(true);
+             setShowGreetingModal(true);
+             setGreetingCountdown(3);
              fetchPhotos(docObj.id);
            }
         } else {
@@ -83,6 +95,8 @@ export default function PhotoGalleryLogin() {
     
     if (pin === wedding.pin) {
       setIsAuthenticated(true);
+      setShowGreetingModal(true);
+      setGreetingCountdown(3);
       localStorage.setItem(`wedding_pin_${linkName}`, pin);
       fetchPhotos(wedding.id);
     } else {
@@ -99,16 +113,22 @@ export default function PhotoGalleryLogin() {
       const response = await fetch(url.replace("http://", "https://"), { mode: 'cors' });
       const blob = await response.blob();
       
-      const file = new File([blob], filename, { type: blob.type });
+      // Sadece iOS cihazlar için share API (Resim olarak kaydetmesini kolaylaştırır)
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
       
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'Düğün Fotoğrafı',
-        });
-      } else {
-        saveAs(blob, filename);
+      if (isIOS) {
+        const file = new File([blob], filename, { type: blob.type });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Düğün Fotoğrafı',
+          });
+          return;
+        }
       }
+      
+      // Android ve Masaüstü için doğrudan indirme (FileSaver)
+      saveAs(blob, filename);
     } catch (err) {
       console.error("Download or share failed:", err);
       // Fallback
@@ -169,17 +189,17 @@ export default function PhotoGalleryLogin() {
   };
 
   if (!wedding && !error) {
-    return <div className="min-h-screen bg-[#060913] flex items-center justify-center p-4">
+    return <div className="min-h-[100dvh] bg-[#f2efe9] flex items-center justify-center p-4">
       <Loader2 className="w-8 h-8 text-[#b59551] animate-spin" />
     </div>;
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#060913] flex flex-col items-center justify-center p-4 selection:bg-[#d4af37]/30">
+      <div className="min-h-[100dvh] bg-[#f2efe9] flex flex-col items-center justify-center p-4 selection:bg-[#d4af37]/30">
         <button 
           onClick={() => navigate(`/${linkName}`)}
-          className="absolute top-6 left-6 text-white/50 hover:text-white flex items-center justify-center gap-2 transition-colors text-sm"
+          className="absolute top-6 left-6 text-[#8a7a5e] hover:text-[#2a2419] flex items-center justify-center gap-2 transition-colors text-sm"
         >
           <ArrowLeft className="w-4 h-4" /> Geri Dön
         </button>
@@ -225,6 +245,36 @@ export default function PhotoGalleryLogin() {
 
   return (
     <div className="min-h-screen bg-[#f9f8f4] font-sans selection:bg-[#d4af37]/30">
+      
+      {showGreetingModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#060913]/90 backdrop-blur-sm p-4">
+          <div className="bg-[#fdfbf7] p-8 rounded-xl shadow-2xl max-w-md w-full border border-[#eaddb6] text-center relative">
+            <img 
+              src="https://res.cloudinary.com/dejx0brol/image/upload/v1778572428/Ba%C5%9Fl%C4%B1ks%C4%B1z-1_rdjgno.png" 
+              alt="Dentlas Ajans" 
+              className="w-16 h-16 mx-auto mb-4 object-contain brightness-0"
+            />
+            <h2 className="text-2xl font-script text-[#2a2419] mb-2">{wedding?.brideName} & {wedding?.groomName}</h2>
+            <p className="font-serif text-[#4a4235] text-sm mb-6">Mutluluklar dileriz! Güzel anılarınızı biriktirmek için Fotoğraf Havuzu sistemimize hoş geldiniz.</p>
+            
+            <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg mb-6">
+              <p className="text-xs font-bold uppercase tracking-wide mb-1">ÖNEMLİ UYARI</p>
+              <p className="text-xs">
+                Sistemdeki tüm görseller düğün tarihinden <strong>30 gün sonra</strong> otomatik olarak tamamen silinecektir. Lütfen verilerinizi bu süre zarfında yedeklemeyi unutmayınız.
+              </p>
+            </div>
+            
+            <button
+              onClick={() => setShowGreetingModal(false)}
+              disabled={greetingCountdown > 0}
+              className={`w-full py-3 rounded-md font-bold tracking-widest uppercase text-sm transition-all ${greetingCountdown > 0 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-[#b59551] text-white hover:bg-[#a08242] shadow-lg'}`}
+            >
+              {greetingCountdown > 0 ? `Lütfen Bekleyin (${greetingCountdown})` : 'DEVAM ET'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <header className="bg-white border-b border-[#eaddb6] sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
