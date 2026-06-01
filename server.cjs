@@ -69,7 +69,7 @@ var saveWeddings = () => {
 loadWeddings();
 var authenticateAdmin = (req, res, next) => {
   const pin = req.headers["x-admin-pin"];
-  const correctPin = process.env.ADMIN_PIN || "1234";
+  const correctPin = process.env.ADMIN_PIN || "356807";
   if (pin !== correctPin) {
     return res.status(401).json({ error: "Unauthorized. Invalid PIN." });
   }
@@ -77,7 +77,7 @@ var authenticateAdmin = (req, res, next) => {
 };
 app.post("/api/auth", (req, res) => {
   const { pin } = req.body;
-  const correctPin = process.env.ADMIN_PIN || "1234";
+  const correctPin = process.env.ADMIN_PIN || "356807";
   if (pin === correctPin) {
     res.json({ success: true });
   } else {
