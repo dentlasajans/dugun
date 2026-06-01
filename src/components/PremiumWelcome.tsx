@@ -365,7 +365,9 @@ setIsUploading(true);
                            }
                            const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'atlas_dugunler';
                            
-                           const uploadPromises = Array.from(files).map(async (file) => {
+                           let currentUploaded = 0;
+                           for (let i = 0; i < files.length; i++) {
+                             const file = files[i];
                              // Compress the image before uploading
                              const options = {
                                maxSizeMB: 1, // highly compressed, fast
@@ -407,9 +409,9 @@ setIsUploading(true);
                                  created_at: new Date().toISOString()
                                });
                              }
-                           });
-                           
-                           await Promise.all(uploadPromises);
+                             currentUploaded++;
+                             setUploadedFilesCount(currentUploaded);
+                           }
 
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">TEŞEKKÜRLER! ♥️</span>';
                            setTimeout(() => { if (button) button.innerHTML = originalText; setIsUploading(false); }, 3000);
