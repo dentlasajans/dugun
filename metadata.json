@@ -1,0 +1,6 @@
+{
+  "name": "3D Düğün Davetiyesi",
+  "description": "Mobil uyumlu, 3 boyutlu yüksek animasyonlu açılır düğün davetiyesi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
