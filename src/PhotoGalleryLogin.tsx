@@ -354,11 +354,7 @@ export default function PhotoGalleryLogin() {
                        alt="Wedding Moment" 
                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                        loading="lazy"
-<<<<<<< HEAD
                        onError={() => !isVideo && handleImageError(photo.id)}
-=======
-                       onError={() => handleImageError(photo.id)}
->>>>>>> 7f044f2d0c4aedf50cbce791aabe66aa8fc3c9a8
                     />
                     {isVideo && (
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -369,15 +365,9 @@ export default function PhotoGalleryLogin() {
                     )}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
                        <button 
-<<<<<<< HEAD
                          onClick={() => shareOrDownloadFile(photo.secure_url, isVideo ? `video-${index + 1}.mp4` : `foto-${index + 1}.${photo.format || 'jpg'}`)}
                          className="bg-white text-[#2a2419] p-3 rounded-full transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 hover:scale-105 hover:bg-[#f6f3ea] shadow-lg"
                          title={isVideo ? "Videoyu Aç / İndir" : "İndir / Paylaş"}
-=======
-                         onClick={() => shareOrDownloadFile(photo.secure_url, `foto-${index + 1}.${photo.format || 'jpg'}`)}
-                         className="bg-white text-[#2a2419] p-3 rounded-full transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 hover:scale-105 hover:bg-[#f6f3ea] shadow-lg"
-                         title="İndir / Paylaş"
->>>>>>> 7f044f2d0c4aedf50cbce791aabe66aa8fc3c9a8
                        >
                           {isVideo ? <Play className="w-5 h-5" /> : <Download className="w-5 h-5" />}
                        </button>
@@ -388,11 +378,7 @@ export default function PhotoGalleryLogin() {
                        {isVideo ? `video-${index + 1}.mp4` : `foto-${index + 1}.${photo.format || 'jpg'}`}
                     </span>
                     <button 
-<<<<<<< HEAD
                        onClick={() => shareOrDownloadFile(photo.secure_url, isVideo ? `video-${index + 1}.mp4` : `foto-${index + 1}.${photo.format || 'jpg'}`)}
-=======
-                       onClick={() => shareOrDownloadFile(photo.secure_url, `foto-${index + 1}.${photo.format || 'jpg'}`)}
->>>>>>> 7f044f2d0c4aedf50cbce791aabe66aa8fc3c9a8
                        className="text-[#b59551] hover:text-[#8a7a5e] transition-colors p-1"
                        title="İndir"
                     >
