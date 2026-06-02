@@ -490,15 +490,31 @@ setIsUploading(true);
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2"><svg class="animate-spin w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Yüklüyor...</span>';
 
                            try {
+                             // Fetch service account token from backend map
+                             const tokenRes = await fetch('/api/get-drive-token');
+                             if (!tokenRes.ok) {
+                               const errInfo = await tokenRes.json().catch(() => ({}));
+                               throw new Error("Token alınamadı: " + (errInfo.error || tokenRes.statusText));
+                             }
+                             const { token } = await tokenRes.json();
+                             if (!token) throw new Error("Geçerli bir token dönmedi.");
+
                              const filesArray = Array.from(files);
                              
                              for (const file of filesArray) {
+                               const metadata = {
+                                 name: `Wedding-Video-${Date.now()}-${file.name}`,
+                                 mimeType: file.type,
+                               };
                                const form = new FormData();
+                               form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
                                form.append('file', file);
-                               form.append('name', `Wedding-Video-${Date.now()}-${file.name}`);
 
-                               const uploadRes = await fetch('/api/upload-video', {
+                               const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
                                  method: 'POST',
+                                 headers: {
+                                   Authorization: `Bearer ${token}`
+                                 },
                                  body: form
                                });
                                
@@ -507,12 +523,28 @@ setIsUploading(true);
                                  let errMsg = errText;
                                  try {
                                    const errJson = JSON.parse(errText);
-                                   errMsg = errJson.error || errText;
+                                   errMsg = errJson.error?.message || errText;
                                  } catch(e) {}
-                                 throw new Error("Yükleme başarısız: " + errMsg);
+                                 throw new Error("Drive'a yükleme başarısız: " + errMsg);
                                }
                                
-                               const fileDetails = await uploadRes.json();
+                               const uploadData = await uploadRes.json();
+                               
+                               // Make it public
+                               await fetch(`https://www.googleapis.com/drive/v3/files/${uploadData.id}/permissions`, {
+                                  method: 'POST',
+                                  headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                  },
+                                  body: JSON.stringify({ role: 'reader', type: 'anyone' })
+                               });
+                               
+                               // Get Links
+                               const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${uploadData.id}?fields=id,webViewLink,webContentLink,thumbnailLink`, {
+                                 headers: { Authorization: `Bearer ${token}` }
+                               });
+                               const fileDetails = await fileRes.json();
                                
                                // Save to Firestore
                                await addDoc(collection(db, 'weddings', wedding.id, 'photos'), {

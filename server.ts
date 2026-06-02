@@ -18,7 +18,42 @@ async function startServer() {
   // For larger video files, memory storage can crash the node process. Disk storage is better.
   const upload = multer({ dest: os.tmpdir() });
 
-  // API route for uploading video to Google Drive
+  app.get("/api/get-drive-token", async (req, res) => {
+    try {
+      const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+      let privateKey = process.env.GOOGLE_PRIVATE_KEY;
+      
+      if (!clientEmail || !privateKey) {
+        return res.status(500).json({ error: "Google Drive servis hesabı bulunamadı." });
+      }
+      
+      // Fix multiline key formats
+      if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+         // Some environments pass the private key without newlines or incorrectly formatted spaces
+         // Or they literally pass '\n' characters.
+         privateKey = privateKey.replace(/\\n/g, '\n');
+      }
+
+      const auth = new google.auth.JWT({
+        email: clientEmail,
+        key: privateKey,
+        scopes: ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/drive.metadata']
+      });
+
+      const tokenObj = await auth.getAccessToken();
+      
+      if (!tokenObj.token) {
+         return res.status(500).json({ error: "Token alınamadı." });
+      }
+
+      res.json({ token: tokenObj.token });
+    } catch (err: any) {
+      console.error("Token Error:", err);
+      res.status(500).json({ error: err.message || "Failed to generate token" });
+    }
+  });
+
+  // API route for uploading video to Google Drive (Fallback / Legacy)
   app.post("/api/upload-video", (req, res, next) => {
     upload.single('file')(req, res, (err) => {
       if (err) {
