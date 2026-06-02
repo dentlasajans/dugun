@@ -1,7 +1,8 @@
 import { motion } from 'motion/react';
-import { useState, useMemo, useEffect } from 'react';
-import { Camera, ChevronDown, Sparkles, Star } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Camera, Video, Sparkles, Star } from 'lucide-react';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { db } from '../firebase';
 import imageCompression from 'browser-image-compression';
 
@@ -230,7 +231,7 @@ export default function PremiumWelcome({ weddingId }: { weddingId?: string }) {
 
   return (
     <div 
-      className="relative w-full h-[100dvh] flex flex-col items-center justify-center overflow-hidden font-sans cursor-pointer bg-[#f2efe9]"
+      className="relative w-full h-full min-h-[100dvh] flex flex-col items-center justify-center overflow-hidden font-sans cursor-pointer bg-transparent"
       onClick={handleClose}
     >
       <div className="absolute inset-0 z-0 pointer-events-none bg-gradient-to-b from-[#f2efe9]/40 to-[#e6dfd1]/90" />
@@ -438,19 +439,104 @@ setIsUploading(true);
                          }
                        }}
                      />
-                     <button 
-                       id="upload-button"
-                       className="relative overflow-hidden w-full group bg-gradient-to-r from-[#d9be75] to-[#cba34a] text-white px-4 py-3.5 rounded-sm text-[12px] font-semibold tracking-[0.2em] shadow-[0_10px_20px_rgba(203,163,74,0.3)] transition-all hover:shadow-[0_10px_25px_rgba(203,163,74,0.5)] hover:from-[#cba34a] hover:to-[#b5903b]"
-                       onClick={(e) => { 
-                         e.stopPropagation(); 
-                         document.getElementById('photo-upload')?.click(); 
-                       }}
-                     >
-                        <div className="absolute inset-0 bg-white/30 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
-                        <span className="relative flex items-center justify-center gap-2 pointer-events-none">
-                          <Camera className="w-4 h-4" /> BİZE FOTOĞRAF GÖNDER
-                         </span>
-                      </button>
+                      <div className="flex gap-2">
+                         <button 
+                           id="upload-button"
+                           title="Sadece Fotoğraf (\'Resimler Galerisi\')"
+                           className="relative flex-1 overflow-hidden group bg-gradient-to-r from-[#d9be75] to-[#cba34a] text-white px-3 py-3 rounded-sm text-[11px] font-semibold tracking-wider shadow-[0_10px_20px_rgba(203,163,74,0.3)] transition-all hover:shadow-[0_10px_25px_rgba(203,163,74,0.5)] hover:from-[#cba34a] hover:to-[#b5903b]"
+                           onClick={(e) => { 
+                             e.stopPropagation(); 
+                             document.getElementById('photo-upload')?.click(); 
+                           }}
+                         >
+                            <div className="absolute inset-0 bg-white/30 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
+                            <span className="relative flex items-center justify-center gap-1.5 pointer-events-none">
+                              <Camera className="w-4 h-4" /> FOTOĞRAF GÖNDER
+                             </span>
+                          </button>
+                          
+                          <button 
+                           id="video-button"
+                           title="Sisteme Video Yükle"
+                           className="relative flex-1 overflow-hidden group bg-gradient-to-r from-[#4a4235] to-[#2a2419] text-white px-3 py-3 rounded-sm text-[11px] font-semibold tracking-wider shadow-md transition-all hover:bg-[#1a160f]"
+                           onClick={(e) => { 
+                             e.stopPropagation(); 
+                             document.getElementById('video-upload')?.click(); 
+                           }}
+                         >
+                            <div className="absolute inset-0 bg-white/10 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
+                            <span className="relative flex items-center justify-center gap-1.5 pointer-events-none">
+                              <Video className="w-4 h-4" /> VİDEO SEÇ
+                             </span>
+                          </button>
+                       </div>
+                       
+                       <input 
+                         type="file" 
+                         accept="video/*" 
+                         id="video-upload" 
+                         className="hidden" 
+                         multiple
+                         onChange={async (e) => {
+                           const files = e.target.files;
+                           setTotalFiles(files ? files.length : 0);
+                           setUploadedFilesCount(0);
+                           setIsUploading(true);
+                           if (!files || files.length === 0) return;
+                           
+                           setIsOpen(true);
+                           const button = document.getElementById('video-button');
+                           const originalText = button?.innerHTML || '<span class="relative flex items-center justify-center gap-1.5"><Video class="w-4 h-4" /> VİDEO SEÇ</span>';
+                           if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2"><svg class="animate-spin w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Yüklüyor...</span>';
+
+                           try {
+                             const filesArray = Array.from(files);
+                             
+                             for (const file of filesArray) {
+                               const form = new FormData();
+                               form.append('file', file);
+                               form.append('name', `Wedding-Video-${Date.now()}-${file.name}`);
+
+                               const uploadRes = await fetch('/api/upload-video', {
+                                 method: 'POST',
+                                 body: form
+                               });
+                               
+                               if (!uploadRes.ok) {
+                                 const errText = await uploadRes.text();
+                                 let errMsg = errText;
+                                 try {
+                                   const errJson = JSON.parse(errText);
+                                   errMsg = errJson.error || errText;
+                                 } catch(e) {}
+                                 throw new Error("Yükleme başarısız: " + errMsg);
+                               }
+                               
+                               const fileDetails = await uploadRes.json();
+                               
+                               // Save to Firestore
+                               await addDoc(collection(db, 'weddings', wedding.id, 'photos'), {
+                                 secure_url: fileDetails.webContentLink || fileDetails.webViewLink,
+                                 public_id: fileDetails.id,
+                                 format: 'mp4',
+                                 created_at: new Date().toISOString(),
+                                 type: 'video',
+                                 thumbnail_url: fileDetails.thumbnailLink || ''
+                               });
+                               
+                               setUploadedFilesCount(prev => prev + 1);
+                             }
+                             
+                             if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">TEŞEKKÜRLER! ♥️</span>';
+                             setTimeout(() => { if (button) button.innerHTML = originalText; setIsUploading(false); }, 3000);
+                           } catch (err: any) {
+                             console.error("Video Upload Error:", err);
+                             alert("Video Yükleme Sırasında Hata Oluştu:\n" + err.message);
+                             if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2">HATA!</span>';
+                             setTimeout(() => { if (button) button.innerHTML = originalText; setIsUploading(false); }, 3000);
+                           }
+                         }}
+                       />
                       {isUploading && (
                         <div className="mt-4 w-full animate-in fade-in duration-300">
                           <div className="flex justify-between items-center text-[10px] font-sans font-bold text-[#8a7a5e] mb-1.5 px-1 tracking-wider uppercase">
