@@ -37,6 +37,31 @@ async function startServer() {
   const app = (0, import_express.default)();
   const PORT = process.env.PORT || 3e3;
   const upload = (0, import_multer.default)({ dest: import_os.default.tmpdir() });
+  app.get("/api/get-drive-token", async (req, res) => {
+    try {
+      const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+      let privateKey = process.env.GOOGLE_PRIVATE_KEY;
+      if (!clientEmail || !privateKey) {
+        return res.status(500).json({ error: "Google Drive servis hesab\u0131 bulunamad\u0131." });
+      }
+      if (!privateKey.includes("-----BEGIN PRIVATE KEY-----")) {
+        privateKey = privateKey.replace(/\\n/g, "\n");
+      }
+      const auth = new import_googleapis.google.auth.JWT({
+        email: clientEmail,
+        key: privateKey,
+        scopes: ["https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/drive.metadata"]
+      });
+      const tokenObj = await auth.getAccessToken();
+      if (!tokenObj.token) {
+        return res.status(500).json({ error: "Token al\u0131namad\u0131." });
+      }
+      res.json({ token: tokenObj.token });
+    } catch (err) {
+      console.error("Token Error:", err);
+      res.status(500).json({ error: err.message || "Failed to generate token" });
+    }
+  });
   app.post("/api/upload-video", (req, res, next) => {
     upload.single("file")(req, res, (err) => {
       if (err) {
