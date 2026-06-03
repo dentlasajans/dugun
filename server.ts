@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -46,7 +47,10 @@ async function startServer() {
          return res.status(500).json({ error: "Token alınamadı." });
       }
 
-      res.json({ token: tokenObj.token });
+      res.json({ 
+         token: tokenObj.token,
+         folderId: process.env.GOOGLE_DRIVE_FOLDER_ID
+      });
     } catch (err: any) {
       console.error("Token Error:", err);
       res.status(500).json({ error: err.message || "Failed to generate token" });

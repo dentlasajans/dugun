@@ -496,16 +496,19 @@ setIsUploading(true);
                                const errInfo = await tokenRes.json().catch(() => ({}));
                                throw new Error("Token alınamadı: " + (errInfo.error || tokenRes.statusText));
                              }
-                             const { token } = await tokenRes.json();
+                             const { token, folderId } = await tokenRes.json();
                              if (!token) throw new Error("Geçerli bir token dönmedi.");
 
                              const filesArray = Array.from(files);
                              
                              for (const file of filesArray) {
-                               const metadata = {
+                               const metadata: any = {
                                  name: `Wedding-Video-${Date.now()}-${file.name}`,
                                  mimeType: file.type,
                                };
+                               if (folderId) {
+                                 metadata.parents = [folderId];
+                               }
                                const form = new FormData();
                                form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
                                form.append('file', file);
