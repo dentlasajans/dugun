@@ -119,9 +119,14 @@ export default function AdminPanel() {
       const folder = zip.folder(`dugun_fotograflari_${weddingId}`);
 
       for (const photo of toDownload) {
-        const response = await fetch(photo.secure_url);
-        const blob = await response.blob();
-        folder?.file(photo.public_id, blob);
+        try {
+           const proxyUrl = `/api/proxy-download?url=${encodeURIComponent(photo.secure_url)}`;
+           const response = await fetch(proxyUrl);
+           const blob = await response.blob();
+           folder?.file(photo.public_id.split('/').pop() || `${Date.now()}`, blob);
+        } catch(e) {
+           console.error("Download fail:", photo.secure_url, e);
+        }
       }
 
       const content = await zip.generateAsync({ type: 'blob' });
@@ -259,12 +264,22 @@ export default function AdminPanel() {
                   )}
                   onClick={() => toggleSelection(photo.public_id)}
                 >
-                   <img 
-                     src={photo.secure_url} 
-                     alt="Yükleme" 
-                     className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                     loading="lazy"
-                   />
+                   {photo.format === 'mp4' || photo.type === 'video' ? (
+                     <video 
+                       src={photo.secure_url} 
+                       className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                       preload="metadata"
+                       controls
+                       playsInline
+                     />
+                   ) : (
+                     <img 
+                       src={photo.secure_url} 
+                       alt="Yükleme" 
+                       className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                       loading="lazy"
+                     />
+                   )}
                    <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors pointer-events-none" />
                    <div className="absolute top-2 left-2 z-10 transition-opacity">
                       {selectedIds.has(photo.public_id) ? (

@@ -112,28 +112,37 @@ export default function PhotoGalleryLogin() {
 
   const shareOrDownloadFile = async (url: string, filename: string) => {
     try {
-      const response = await fetch(url.replace("http://", "https://"), { mode: 'cors' });
-      const blob = await response.blob();
-      
-      // Sadece iOS cihazlar için share API (Resim olarak kaydetmesini kolaylaştırır)
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
+      const secureUrl = url.replace("http://", "https://");
+      const proxyUrl = `/api/proxy-download?url=${encodeURIComponent(secureUrl)}&filename=${encodeURIComponent(filename)}`;
       
-      if (isIOS) {
-        const file = new File([blob], filename, { type: blob.type });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: 'Düğün Fotoğrafı',
-          });
-          return;
+      if (isIOS && navigator.canShare) {
+        try {
+          const response = await fetch(proxyUrl);
+          const blob = await response.blob();
+          const file = new File([blob], filename, { type: blob.type });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Düğün Medyası',
+            });
+            return;
+          }
+        } catch(e) {
+          console.warn("Share API failed", e);
         }
       }
       
-      // Android ve Masaüstü için doğrudan indirme (FileSaver)
-      saveAs(blob, filename);
+      // Fallback/Non-iOS - doğrudan tarayıcı üzerinden indir
+      const a = document.createElement('a');
+      a.href = proxyUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } catch (err) {
-      console.error("Download or share failed:", err);
-      // Fallback
+      console.error("Download fallback failed:", err);
+      // Son çare
       window.open(url, '_blank');
     }
   };
@@ -165,9 +174,13 @@ export default function PhotoGalleryLogin() {
           const photo = photos[index];
           try {
              // To bypass CORS or use optimized URL if needed, we just fetch the secure_url
-             const response = await fetch(photo.secure_url);
+             const proxyUrl = `/api/proxy-download?url=${encodeURIComponent(photo.secure_url)}`;
+             const response = await fetch(proxyUrl);
              const blob = await response.blob();
-             if (folder) folder.file(`foto-${index + 1}.jpg`, blob);
+             if (folder) {
+               const isVideo = photo.type === 'video' || photo.format === 'mp4';
+               folder.file(isVideo ? `video-${index + 1}.mp4` : `foto-${index + 1}.${photo.format || 'jpg'}`, blob);
+             }
           } catch(e) {
              console.error(`Failed to fetch photo ${photo.secure_url}`, e);
           }
@@ -348,30 +361,42 @@ export default function PhotoGalleryLogin() {
               const displayUrl = isVideo && photo.thumbnail_url ? photo.thumbnail_url : photo.secure_url;
               return (
               <div key={photo.id} className="group relative bg-[#fdfbf7] border border-[#eaddb6] rounded-lg overflow-hidden flex flex-col shadow-sm hover:shadow-md transition-shadow">
-                 <div className="aspect-[3/4] relative overflow-hidden bg-gray-100 flex items-center justify-center">
-                    <img 
-                       src={displayUrl} 
-                       alt="Wedding Moment" 
-                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                       loading="lazy"
-                       onError={() => !isVideo && handleImageError(photo.id)}
-                    />
-                    {isVideo && (
+                 <div className="aspect-[3/4] relative overflow-hidden bg-[#eaddb6]/10 flex items-center justify-center">
+                    {isVideo && !photo.thumbnail_url ? (
+                      <video 
+                         src={displayUrl} 
+                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                         preload="metadata"
+                         controls
+                         playsInline
+                      />
+                    ) : (
+                      <img 
+                         src={displayUrl} 
+                         alt="Wedding Moment" 
+                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                         loading="lazy"
+                         onError={() => !isVideo && handleImageError(photo.id)}
+                      />
+                    )}
+                    {isVideo && !!photo.thumbnail_url && (
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                          <div className="w-12 h-12 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-sm shadow-lg">
                             <Play className="w-5 h-5 text-white ml-1" />
                          </div>
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                       <button 
-                         onClick={() => shareOrDownloadFile(photo.secure_url, isVideo ? `video-${index + 1}.mp4` : `foto-${index + 1}.${photo.format || 'jpg'}`)}
-                         className="bg-white text-[#2a2419] p-3 rounded-full transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 hover:scale-105 hover:bg-[#f6f3ea] shadow-lg"
-                         title={isVideo ? "Videoyu Aç / İndir" : "İndir / Paylaş"}
-                       >
-                          {isVideo ? <Play className="w-5 h-5" /> : <Download className="w-5 h-5" />}
-                       </button>
-                    </div>
+                    {(!isVideo || !!photo.thumbnail_url) && (
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none">
+                         <button 
+                           onClick={() => shareOrDownloadFile(photo.secure_url, isVideo ? `video-${index + 1}.mp4` : `foto-${index + 1}.${photo.format || 'jpg'}`)}
+                           className="pointer-events-auto bg-white text-[#2a2419] p-3 rounded-full transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 hover:scale-105 hover:bg-[#f6f3ea] shadow-lg"
+                           title={isVideo ? "Videoyu Aç / İndir" : "İndir / Paylaş"}
+                         >
+                            {isVideo ? <Play className="w-5 h-5" /> : <Download className="w-5 h-5" />}
+                         </button>
+                      </div>
+                    )}
                  </div>
                  <div className="pt-2 px-3 pb-3 bg-white border-t border-[#eaddb6]/50 flex justify-between items-center">
                     <span className="text-[10px] font-medium text-[#8a7a5e] uppercase tracking-wider truncate mr-2">

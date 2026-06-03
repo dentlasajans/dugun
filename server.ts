@@ -3,13 +3,13 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import multer from "multer";
-import { google } from "googleapis";
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
 
 async function startServer() {
   const app = express();
@@ -19,131 +19,103 @@ async function startServer() {
   // For larger video files, memory storage can crash the node process. Disk storage is better.
   const upload = multer({ dest: os.tmpdir() });
 
-  app.get("/api/get-drive-token", async (req, res) => {
+  app.get("/api/test-key", (req, res) => {
+    const rawKey = process.env.GOOGLE_PRIVATE_KEY || '';
+    const formattedKey = formatPrivateKey(rawKey);
+    res.json({
+      rawHasLiteralNewline: rawKey.includes('\\n'),
+      rawHasRealNewline: rawKey.includes('\n'),
+      formattedHasLiteralNewline: formattedKey.includes('\\n'),
+      formattedHasRealNewline: formattedKey.includes('\n'),
+      rawStart: rawKey.substring(0, 40),
+      rawEnd: rawKey.substring(rawKey.length - 40),
+      formattedStart: formattedKey.substring(0, 40),
+      formattedEnd: formattedKey.substring(formattedKey.length - 40),
+    });
+  });
+
+  app.get("/api/get-s3-presigned-url", async (req, res) => {
     try {
-      const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-      let privateKey = process.env.GOOGLE_PRIVATE_KEY;
-      
-      if (!clientEmail || !privateKey) {
-        return res.status(500).json({ error: "Google Drive servis hesabı bulunamadı." });
-      }
-      
-      // Replace literal '\n' characters with newlines
-      privateKey = privateKey.replace(/\\n/g, '\n');
+      const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+      const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
 
-      if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
-         privateKey = '-----BEGIN PRIVATE KEY-----\n' + privateKey.trim();
-      }
-      if (!privateKey.includes('-----END PRIVATE KEY-----')) {
-         privateKey = privateKey.trim() + '\n-----END PRIVATE KEY-----\n';
+      const fileName = req.query.fileName as string;
+      const fileType = req.query.fileType as string;
+      if (!fileName || !fileType) return res.status(400).json({ error: "fileName and fileType required" });
+
+      const endpoint = process.env.S3_ENDPOINT || '';
+      const region = process.env.S3_REGION || 'auto';
+      const accessKeyId = process.env.S3_ACCESS_KEY_ID || '';
+      const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY || '';
+      const bucket = process.env.S3_BUCKET_NAME || '';
+      const publicDomain = process.env.S3_PUBLIC_DOMAIN || '';
+
+      if (!endpoint || !accessKeyId || !secretAccessKey || !bucket) {
+        return res.status(500).json({ error: "S3 ayarları yapılandırılmamış. Sunucuya S3 bilgileri eklenmelidir." });
       }
 
-      const auth = new google.auth.JWT({
-        email: clientEmail,
-        key: privateKey,
-        scopes: ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/drive.metadata']
+      const client = new S3Client({
+        region,
+        endpoint,
+        credentials: {
+          accessKeyId,
+          secretAccessKey,
+        },
       });
 
-      const tokenObj = await auth.getAccessToken();
-      
-      if (!tokenObj.token) {
-         return res.status(500).json({ error: "Token alınamadı." });
-      }
+      const key = `weddings/${Date.now()}-${fileName.replace(/\s+/g, '-')}`;
 
-      res.json({ 
-         token: tokenObj.token,
-         folderId: process.env.GOOGLE_DRIVE_FOLDER_ID
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        ContentType: fileType,
       });
-    } catch (err: any) {
-      console.error("Token Error:", err);
-      res.status(500).json({ error: err.message || "Failed to generate token" });
+
+      const presignedUrl = await getSignedUrl(client, command, { expiresIn: 3600 });
+      let publicUrl = publicDomain ? (publicDomain.startsWith('http') ? `${publicDomain}/${key}` : `https://${publicDomain}/${key}`) : `${endpoint}/${bucket}/${key}`;
+
+      res.json({
+        uploadUrl: presignedUrl,
+        publicUrl: publicUrl,
+        publicId: key
+      });
+
+    } catch (e: any) {
+      console.error("S3 Presigner error:", e);
+      res.status(500).json({ error: "S3 URL oluşturulamadı: " + e.message });
     }
   });
 
-  // API route for uploading video to Google Drive (Fallback / Legacy)
-  app.post("/api/upload-video", (req, res, next) => {
-    upload.single('file')(req, res, (err) => {
-      if (err) {
-        console.error("Multer error:", err);
-        return res.status(400).json({ error: "Dosya yükleme hatası: " + err.message });
+
+
+
+  app.get("/api/proxy-download", (req, res) => {
+    const url = req.query.url as string;
+    if (!url) return res.status(400).send("URL is required");
+    
+    // We can use https or http to proxy the file
+    // Doing it this way streams it and doesn't load whole file in memory
+    const client = url.startsWith('https') ? require('https') : require('http');
+    client.get(url, (proxyRes: any) => {
+      // res.status(proxyRes.statusCode || 200);
+      
+      // Sadece güvenli header'ları geçir, CORS'u kapat
+      if (proxyRes.statusCode) res.status(proxyRes.statusCode);
+      
+      const contentType = proxyRes.headers['content-type'];
+      if (contentType) res.setHeader('Content-Type', contentType);
+      
+      const contentLength = proxyRes.headers['content-length'];
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+
+      if (req.query.filename) {
+         res.setHeader('Content-Disposition', `attachment; filename="${req.query.filename}"`);
       }
-      next();
+
+      proxyRes.pipe(res);
+    }).on('error', (err: any) => {
+      res.status(500).send(err.message);
     });
-  }, async (req, res) => {
-    try {
-      const file = req.file;
-      if (!file) {
-        return res.status(400).json({ error: "No file provided" });
-      }
-
-      // Check credentials
-      const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-      const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-
-      if (!clientEmail || !privateKey) {
-        return res.status(500).json({ error: "Google Drive kimlik bilgileri yapılandırılmadı (GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY)." });
-      }
-
-      const auth = new google.auth.GoogleAuth({
-        credentials: {
-          client_email: clientEmail,
-          private_key: privateKey,
-        },
-        scopes: ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive']
-      });
-
-      const drive = google.drive({ version: 'v3', auth });
-
-      const fileMetadata: any = {
-        name: req.body.name || `Upload-${Date.now()}-${file.originalname}`,
-      };
-      if (folderId) {
-        fileMetadata.parents = [folderId];
-      }
-
-      const media = {
-        mimeType: file.mimetype,
-        body: fs.createReadStream(file.path)
-      };
-
-      console.log("Uploading file to Google Drive...");
-      const response = await drive.files.create({
-        requestBody: fileMetadata,
-        media: media,
-        fields: 'id, webViewLink, webContentLink, thumbnailLink'
-      });
-      
-      const fileId = response.data.id;
-      
-      // Clean up temp file
-      fs.unlink(file.path, (err) => {
-        if (err) console.error("Error deleting temp file:", err);
-      });
-
-      if (fileId) {
-        console.log("File uploaded, setting permissions...");
-        // Set permissions so anyone with the link can view
-        await drive.permissions.create({
-          fileId: fileId,
-          requestBody: {
-            role: 'reader',
-            type: 'anyone',
-          }
-        });
-      }
-
-      res.json({
-        id: fileId,
-        webViewLink: response.data.webViewLink,
-        webContentLink: response.data.webContentLink,
-        thumbnailLink: response.data.thumbnailLink
-      });
-
-    } catch (error: any) {
-      console.error("Upload Error:", error);
-      res.status(500).json({ error: error.message || "Failed to upload video" });
-    }
   });
 
   // Vite middleware for development

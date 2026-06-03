@@ -3,7 +3,8 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { Camera, Video, Sparkles, Star } from 'lucide-react';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { db } from '../firebase';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import imageCompression from 'browser-image-compression';
 
 const SakuraPetal = ({ cx, cy, scale, rot }: { cx: number, cy: number, scale: number, rot: number }) => (
@@ -490,74 +491,39 @@ setIsUploading(true);
                            if (button) button.innerHTML = '<span class="relative flex items-center justify-center gap-2"><svg class="animate-spin w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Yüklüyor...</span>';
 
                            try {
-                             // Fetch service account token from backend map
-                             const tokenRes = await fetch('/api/get-drive-token');
-                             if (!tokenRes.ok) {
-                               const errInfo = await tokenRes.json().catch(() => ({}));
-                               throw new Error("Token alınamadı: " + (errInfo.error || tokenRes.statusText));
-                             }
-                             const { token, folderId } = await tokenRes.json();
-                             if (!token) throw new Error("Geçerli bir token dönmedi.");
-
                              const filesArray = Array.from(files);
                              
                              for (const file of filesArray) {
-                               const metadata: any = {
-                                 name: `Wedding-Video-${Date.now()}-${file.name}`,
-                                 mimeType: file.type,
-                               };
-                               if (folderId) {
-                                 metadata.parents = [folderId];
-                               }
-                               const form = new FormData();
-                               form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-                               form.append('file', file);
+                                let downloadURL = '';
+                                let publicId = '';
+                                
+                                try {
+                                   const s3Res = await fetch(`/api/get-s3-presigned-url?fileName=${encodeURIComponent(file.name)}&fileType=${encodeURIComponent(file.type)}`);
+                                   const s3Data = await s3Res.json();
+                                   if(!s3Res.ok) throw new Error(s3Data.error || "S3 alınamadı");
 
-                               const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-                                 method: 'POST',
-                                 headers: {
-                                   Authorization: `Bearer ${token}`
-                                 },
-                                 body: form
-                               });
-                               
-                               if (!uploadRes.ok) {
-                                 const errText = await uploadRes.text();
-                                 let errMsg = errText;
-                                 try {
-                                   const errJson = JSON.parse(errText);
-                                   errMsg = errJson.error?.message || errText;
-                                 } catch(e) {}
-                                 throw new Error("Drive'a yükleme başarısız: " + errMsg);
-                               }
-                               
-                               const uploadData = await uploadRes.json();
-                               
-                               // Make it public
-                               await fetch(`https://www.googleapis.com/drive/v3/files/${uploadData.id}/permissions`, {
-                                  method: 'POST',
-                                  headers: {
-                                    Authorization: `Bearer ${token}`,
-                                    'Content-Type': 'application/json'
-                                  },
-                                  body: JSON.stringify({ role: 'reader', type: 'anyone' })
-                               });
-                               
-                               // Get Links
-                               const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${uploadData.id}?fields=id,webViewLink,webContentLink,thumbnailLink`, {
-                                 headers: { Authorization: `Bearer ${token}` }
-                               });
-                               const fileDetails = await fileRes.json();
-                               
-                               // Save to Firestore
-                               await addDoc(collection(db, 'weddings', wedding.id, 'photos'), {
-                                 secure_url: fileDetails.webContentLink || fileDetails.webViewLink,
-                                 public_id: fileDetails.id,
-                                 format: 'mp4',
-                                 created_at: new Date().toISOString(),
-                                 type: 'video',
-                                 thumbnail_url: fileDetails.thumbnailLink || ''
-                               });
+                                   const uploadRes = await fetch(s3Data.uploadUrl, {
+                                     method: 'PUT',
+                                     body: file,
+                                     headers: { 'Content-Type': file.type }
+                                   });
+                                   if(!uploadRes.ok) throw new Error(`HTTP ${uploadRes.status}`);
+
+                                   downloadURL = s3Data.publicUrl;
+                                   publicId = s3Data.publicId;
+                                } catch (s3Err: any) {
+                                   throw new Error("Video yüklenemedi (S3): " + s3Err.message);
+                                }
+                                
+                                // Save to Firestore
+                                await addDoc(collection(db, 'weddings', wedding.id, 'photos'), {
+                                  secure_url: downloadURL,
+                                  public_id: publicId,
+                                  format: file.name.split('.').pop() || 'mp4',
+                                  created_at: new Date().toISOString(),
+                                  type: 'video',
+                                  thumbnail_url: ''
+                                });
                                
                                setUploadedFilesCount(prev => prev + 1);
                              }
