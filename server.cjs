@@ -22,6 +22,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // server.ts
+var import_config = require("dotenv/config");
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_vite = require("vite");
@@ -56,7 +57,10 @@ async function startServer() {
       if (!tokenObj.token) {
         return res.status(500).json({ error: "Token al\u0131namad\u0131." });
       }
-      res.json({ token: tokenObj.token });
+      res.json({
+        token: tokenObj.token,
+        folderId: process.env.GOOGLE_DRIVE_FOLDER_ID
+      });
     } catch (err) {
       console.error("Token Error:", err);
       res.status(500).json({ error: err.message || "Failed to generate token" });
