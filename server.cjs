@@ -45,8 +45,12 @@ async function startServer() {
       if (!clientEmail || !privateKey) {
         return res.status(500).json({ error: "Google Drive servis hesab\u0131 bulunamad\u0131." });
       }
+      privateKey = privateKey.replace(/\\n/g, "\n");
       if (!privateKey.includes("-----BEGIN PRIVATE KEY-----")) {
-        privateKey = privateKey.replace(/\\n/g, "\n");
+        privateKey = "-----BEGIN PRIVATE KEY-----\n" + privateKey.trim();
+      }
+      if (!privateKey.includes("-----END PRIVATE KEY-----")) {
+        privateKey = privateKey.trim() + "\n-----END PRIVATE KEY-----\n";
       }
       const auth = new import_googleapis.google.auth.JWT({
         email: clientEmail,
