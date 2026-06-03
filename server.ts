@@ -28,11 +28,14 @@ async function startServer() {
         return res.status(500).json({ error: "Google Drive servis hesabı bulunamadı." });
       }
       
-      // Fix multiline key formats
+      // Replace literal '\n' characters with newlines
+      privateKey = privateKey.replace(/\\n/g, '\n');
+
       if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
-         // Some environments pass the private key without newlines or incorrectly formatted spaces
-         // Or they literally pass '\n' characters.
-         privateKey = privateKey.replace(/\\n/g, '\n');
+         privateKey = '-----BEGIN PRIVATE KEY-----\n' + privateKey.trim();
+      }
+      if (!privateKey.includes('-----END PRIVATE KEY-----')) {
+         privateKey = privateKey.trim() + '\n-----END PRIVATE KEY-----\n';
       }
 
       const auth = new google.auth.JWT({
